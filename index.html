@@ -21,17 +21,6 @@
   .btn-blue{background:#2563eb;border:none;border-radius:10px;padding:14px 0;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:'Courier New',monospace;letter-spacing:1px;width:100%}
   .btn-dim{background:#1e3a5f;border:none;border-radius:8px;color:#94a3b8;cursor:pointer;font-family:'Courier New',monospace}
 
-  /* Autocomplete */
-  .ac-wrap{position:relative;width:100%}
-  .ac-dropdown{display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:#0d1520;border:1px solid #2563eb;border-radius:10px;z-index:9999;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.6)}
-  .ac-dropdown.open{display:block}
-  .ac-item{padding:13px 14px;font-size:13px;color:#94a3b8;cursor:pointer;border-bottom:1px solid #1e293b;font-family:'Courier New',monospace}
-  .ac-item:last-child{border-bottom:none}
-  .ac-item:active{background:#1e3a5f}
-  .ac-main{color:#e2e8f0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ac-sub{color:#475569;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
-  .ac-loading{text-align:center;padding:14px;color:#334155;font-size:12px}
-
   /* Stats button */
   #statsBtn{position:fixed;top:14px;right:14px;z-index:999;background:#1d4ed8;border:none;border-radius:10px;color:white;padding:8px 16px;font-family:'Courier New',monospace;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;box-shadow:0 2px 12px rgba(29,78,216,0.5)}
 
@@ -129,7 +118,7 @@
       </div>
       <button id="voiceBtn" class="btn-dim" style="width:100%;padding:12px 0;font-size:13px;border-radius:9px" onclick="enableVoice()">Enable Voice Directions</button>
     </div>
-    <button id="continueBtn" class="btn-blue" style="opacity:1;pointer-events:auto" onclick="goHome()">Allow Location to Continue</button>
+    <button id="continueBtn" class="btn-blue" style="opacity:0.4;pointer-events:none" onclick="goHome()">Allow Location to Continue</button>
     <button onclick="goHome()" style="background:none;border:none;color:#334155;font-size:12px;cursor:pointer;padding:4px 0;font-family:'Courier New',monospace">Skip · Use manual mode</button>
   </div>
 </div>
@@ -145,20 +134,14 @@
     <div style="color:#3b82f6;font-size:10px;letter-spacing:3px;text-transform:uppercase">Route Setup</div>
     <div>
       <div class="lbl">From</div>
-      <div class="ac-wrap">
-        <div style="position:relative">
-          <input class="inp" id="fromInput" type="text" placeholder="Start address or city" style="padding-right:40px" autocomplete="off" oninput="acSearch(this,'fromDrop')" onblur="acBlur('fromDrop')">
-          <button onclick="useMyLocation()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:#3b82f6;padding:2px" id="locPinBtn">📍</button>
-        </div>
-        <div class="ac-dropdown" id="fromDrop"></div>
+      <div style="position:relative">
+        <input class="inp" id="fromInput" type="text" placeholder="Start address or city" style="padding-right:40px">
+        <button onclick="useMyLocation()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:#3b82f6;padding:2px" id="locPinBtn">📍</button>
       </div>
     </div>
     <div>
       <div class="lbl">To</div>
-      <div class="ac-wrap">
-        <input class="inp" id="toInput" type="text" placeholder="Destination" autocomplete="off" oninput="acSearch(this,'toDrop')" onblur="acBlur('toDrop')">
-        <div class="ac-dropdown" id="toDrop"></div>
-      </div>
+      <input class="inp" id="toInput" type="text" placeholder="Destination">
     </div>
     <div>
       <div class="lbl">Max Speed Limit</div>
@@ -365,16 +348,6 @@
 </div>
 
 <script>
-window.addEventListener('error', function(e){
-  document.body.style.background='#000';
-  document.body.innerHTML='<pre style="color:red;padding:20px;font-size:11px;white-space:pre-wrap">'+
-  'MSG: '+e.message+'\n'+
-  'FILE: '+e.filename+'\n'+
-  'LINE: '+e.lineno+'\n'+
-  'COL: '+e.colno+'\n'+
-  'ERR: '+(e.error?e.error.stack:'none')+'</pre>';
-});
-
 // ═══ STATE ═══
 let voiceOn = false;
 let currentScreen = 'permScreen';
@@ -404,7 +377,7 @@ function parseMiles(s) {
 }
 function haversine(la1,lo1,la2,lo2) {
   const R=3958.8,r=Math.PI/180,dLa=(la2-la1)*r,dLo=(lo2-lo1)*r;
-  const a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)*Math.sin(dLo/2);
+  const a=Math.sin(dLa/2)**2+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)**2;
   return R*2*Math.asin(Math.sqrt(a));
 }
 function fmtDist(mi) {
@@ -851,108 +824,6 @@ function refreshStats() {
   }
   updateStatsVoice();
   updateStatsGas();
-}
-
-
-// ═══ AUTOCOMPLETE ═══
-let acTimers = {};
-let userLat = null, userLon = null;
-
-// Grab user position once
-function initUserPos() {
-  if (!navigator.geolocation) return;
-  navigator.geolocation.getCurrentPosition(function(p) {
-    userLat = p.coords.latitude;
-    userLon = p.coords.longitude;
-  }, function(){}, { timeout:8000, maximumAge:60000 });
-}
-initUserPos();
-
-// Haversine reused for distance label
-function distKm(la1,lo1,la2,lo2) {
-  const R=6371, r=Math.PI/180;
-  const dLa=(la2-la1)*r, dLo=(lo2-lo1)*r;
-  const a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)*Math.sin(dLo/2);
-  return R*2*Math.asin(Math.sqrt(a));
-}
-
-function fmtDistLabel(km) {
-  if (km < 1) return Math.round(km*1000)+' m';
-  if (km < 16) return km.toFixed(1)+' km';
-  const mi = km*0.621371;
-  if (mi < 1) return (mi*5280).toFixed(0)+' ft';
-  return mi.toFixed(1)+' mi';
-}
-
-async function acSearch(inp, dropId) {
-  const q = inp.value.trim();
-  const drop = document.getElementById(dropId);
-  clearTimeout(acTimers[dropId]);
-  if (q.length < 3) { drop.classList.remove('open'); drop.innerHTML=''; return; }
-  drop.classList.add('open');
-  drop.innerHTML = '<div class="ac-loading">Searching…</div>';
-  acTimers[dropId] = setTimeout(async function() {
-    try {
-      // Build URL - bias toward user location if known
-      let url = 'https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&addressdetails=1&limit=10';
-      if (userLat !== null) url += '&lat='+userLat+'&lon='+userLon;
-      const r = await fetch(url, { headers: { 'User-Agent': 'RoadNavigator/1.0', 'Accept-Language': 'en' } });
-      const results = await r.json();
-      if (!results.length) { drop.innerHTML='<div class="ac-loading">No results found</div>'; return; }
-
-      // Attach distance to each result
-      results.forEach(function(item) {
-        if (userLat !== null) {
-          item._dist = distKm(userLat, userLon, parseFloat(item.lat), parseFloat(item.lon));
-        } else {
-          item._dist = Infinity;
-        }
-      });
-
-      // Sort closest first
-      results.sort(function(a,b){ return a._dist - b._dist; });
-
-      // Keep top 6
-      const top = results.slice(0, 6);
-
-      drop.innerHTML = '';
-      top.forEach(function(item) {
-        const a = item.address || {};
-        const road = [a.house_number, a.road].filter(Boolean).join(' ');
-        const city = a.city||a.town||a.village||a.suburb||a.county||'';
-        const state = a.state||'';
-        const main = road || city || item.display_name.split(',')[0];
-        const sub = [city, state].filter(Boolean).join(', ');
-        const distLabel = item._dist !== Infinity ? fmtDistLabel(item._dist) : '';
-        const full = item.display_name;
-
-        const el = document.createElement('div');
-        el.className = 'ac-item';
-        el.innerHTML =
-          '<div style="flex:1;min-width:0">'+
-            '<div class="ac-main">'+escHtml(main)+'</div>'+
-            (sub?'<div class="ac-sub">'+escHtml(sub)+'</div>':'')+
-          '</div>'+
-          (distLabel?'<div style="font-size:11px;color:#3b82f6;flex-shrink:0;margin-left:10px;font-family:Courier New,monospace">'+escHtml(distLabel)+'</div>':'');
-        el.style.display = 'flex';
-        el.style.alignItems = 'center';
-        el.style.justifyContent = 'space-between';
-
-        el.addEventListener('touchend', function(e) { e.preventDefault(); inp.value=full; drop.classList.remove('open'); drop.innerHTML=''; });
-        el.addEventListener('mousedown', function(e) { e.preventDefault(); inp.value=full; drop.classList.remove('open'); drop.innerHTML=''; });
-        drop.appendChild(el);
-      });
-      drop.classList.add('open');
-    } catch(e) { drop.innerHTML='<div class="ac-loading">Search unavailable</div>'; }
-  }, 380);
-}
-
-function acBlur(dropId) {
-  setTimeout(function(){ document.getElementById(dropId).classList.remove('open'); }, 200);
-}
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ═══ INPUT LISTENERS ═══
