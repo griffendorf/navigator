@@ -456,7 +456,7 @@ async function useMyLocation() {
   btn.textContent = '⏳';
   navigator.geolocation.getCurrentPosition(async function(pos) {
     try {
-      const r = await fetch('https://nominatim.openstreetmap.org/reverse?lat='+pos.coords.latitude+'&lon='+pos.coords.longitude+'&format=json',{headers:{'User-Agent':'RoadNavigator/1.0'}});
+      const r = await fetch('http://10.56.19.110:5000/nominatim/reverse?lat='+pos.coords.latitude+'&lon='+pos.coords.longitude+'&format=json',{headers:{'User-Agent':'RoadNavigator/1.0'}});
       const d = await r.json();
       const a = d.address||{};
       const parts = [a.house_number,a.road,a.city||a.town||a.village].filter(Boolean);
