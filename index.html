@@ -456,7 +456,7 @@ async function useMyLocation() {
   btn.textContent = '⏳';
   navigator.geolocation.getCurrentPosition(async function(pos) {
     try {
-      const r = await fetch('http://10.56.19.110:5000/nominatim/reverse?lat='+pos.coords.latitude+'&lon='+pos.coords.longitude+'&format=json',{headers:{'User-Agent':'RoadNavigator/1.0'}});
+      const r = await fetch('http://10.56.19.110:8888/nominatim/reverse?lat='+pos.coords.latitude+'&lon='+pos.coords.longitude+'&format=json',{headers:{'User-Agent':'RoadNavigator/1.0'}});
       const d = await r.json();
       const a = d.address||{};
       const parts = [a.house_number,a.road,a.city||a.town||a.village].filter(Boolean);
@@ -482,7 +482,7 @@ async function startNav() {
   errEl.style.display = 'none';
   try {
     const prompt = 'Generate real step-by-step driving directions from "'+from+'" to "'+to+'". STRICT RULE: Only use roads with speed limits of '+maxMph+' MPH or less. No highways or interstates. Respond with ONLY a JSON object. No explanation. No markdown. No code blocks. Just the raw JSON:\n{"totalDistance":"X.X miles","estimatedTime":"Xh Xmin","steps":[{"instruction":"Head north on Main St","distance":"0.3 mi","road":"Main St","speedLimit":30,"dir":"straight"}]}\ndir must be one of: left, right, straight, slight-left, slight-right, u-turn, arrive\nEvery step speedLimit must be '+maxMph+' or less. Use real street names.';
-    const res = await fetch('http://10.56.19.110:5000/proxy', {
+    const res = await fetch('http://10.56.19.110:8888/proxy', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1500, tools:[{type:'web_search_20250305',name:'web_search'}], messages:[{role:'user',content:prompt}] })
