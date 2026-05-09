@@ -1,910 +1,835 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Road Navigator</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;width:100%;overflow-x:hidden}
+  body{background:#080e1a;font-family:'Courier New',monospace;color:#e2e8f0}
+  input,button{-webkit-appearance:none;font-family:'Courier New',monospace}
+  input{color:#e2e8f0}
+  .screen{display:none;flex-direction:column;min-height:100vh}
+  .screen.active{display:flex}
+  .navscreen{height:100vh;overflow:hidden}
 
-// Inject fonts
-if (typeof document !== "undefined") {
-  const s = document.createElement("style");
-  s.textContent = `@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..500&display=swap');`;
-  document.head.appendChild(s);
-}
+  /* Cards */
+  .card{background:#0d1520;border:1px solid #1e3a5f;border-radius:16px;padding:22px;width:100%;display:flex;flex-direction:column;gap:14px;margin-bottom:14px}
+  .lbl{color:#64748b;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:5px}
+  .inp{background:#080e1a;border:1px solid #1e3a5f;border-radius:8px;padding:11px 12px;color:#e2e8f0;font-size:14px;font-family:'Courier New',monospace;outline:none;width:100%}
+  .btn-blue{background:#2563eb;border:none;border-radius:10px;padding:14px 0;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:'Courier New',monospace;letter-spacing:1px;width:100%}
+  .btn-dim{background:#1e3a5f;border:none;border-radius:8px;color:#94a3b8;cursor:pointer;font-family:'Courier New',monospace}
 
-// ── Camera Modal ────────────────────────────────────────────────────────────
-function CameraModal({ onCapture, onClose }) {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
-  const [ready, setReady] = useState(false);
-  const [facingMode, setFacingMode] = useState("environment");
-  const [captured, setCaptured] = useState(null); // data URL preview
-  const [camError, setCamError] = useState(null);
+  /* Stats button */
+  #statsBtn{position:fixed;top:14px;right:14px;z-index:999;background:#1d4ed8;border:none;border-radius:10px;color:white;padding:8px 16px;font-family:'Courier New',monospace;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;box-shadow:0 2px 12px rgba(29,78,216,0.5)}
 
-  const startCamera = useCallback(async (facing) => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-    }
-    setCamError(null);
-    setReady(false);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => setReady(true);
-      }
-    } catch (e) {
-      setCamError("Camera access denied or unavailable. Please allow camera permissions and try again.");
-    }
-  }, []);
+  /* Perm screen */
+  #permScreen{background:#080e1a;align-items:center;justify-content:center;padding:28px 20px;background-image:radial-gradient(ellipse at 50% 30%,#0d2040 0%,#080e1a 65%)}
+  .perm-card{background:#0d1520;border-radius:14px;padding:20px;width:100%;max-width:380px;margin-bottom:12px}
+  .perm-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .perm-icon{width:46px;height:46px;border-radius:12px;background:#0a1e3d;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
 
-  useEffect(() => {
-    startCamera(facingMode);
-    return () => {
-      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
+  /* Home screen */
+  #homeScreen{background:#080e1a;align-items:center;padding:28px 18px 40px;background-image:radial-gradient(ellipse at 50% 0%,#0d2040 0%,#080e1a 70%)}
+  #homeScreen .card{max-width:420px}
 
-  const flipCamera = () => {
-    const next = facingMode === "environment" ? "user" : "environment";
-    setFacingMode(next);
-    setCaptured(null);
-    startCamera(next);
-  };
+  /* Gas bar */
+  .gasbar{display:flex;align-items:center;gap:8px}
+  .gasbar-segs{display:flex;gap:3px;flex:1}
+  .gasbar-seg{flex:1;height:14px;border-radius:3px;background:#1e293b;transition:background 0.4s}
 
-  const capture = () => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d").drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    setCaptured(dataUrl);
-  };
+  /* Nav screen */
+  #navScreen{background:#080e1a}
+  #navTabBar{display:flex;background:#060d1a;border-bottom:3px solid #1e293b;flex-shrink:0}
+  .nav-tab{flex:1;background:transparent;border:none;border-bottom:3px solid transparent;color:#475569;padding:13px 0;cursor:pointer;font-family:'Courier New',monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;margin-bottom:-3px;display:flex;align-items:center;justify-content:center;gap:7px}
+  .nav-tab.active{background:#0d2040;border-bottom-color:#3b82f6;color:#60a5fa;font-weight:700}
+  #stepBanner{padding:16px 18px 12px;position:relative;overflow:hidden;flex-shrink:0;box-shadow:0 4px 20px rgba(0,0,0,0.5)}
+  #progressBar{height:3px;background:#1e293b;flex-shrink:0}
+  #progressFill{height:100%;background:#3b82f6;transition:width 0.5s}
+  #statsBar{display:flex;background:#060d1a;border-bottom:1px solid #1e293b;flex-shrink:0}
+  .stat-cell{flex:1;padding:7px 0;text-align:center;border-right:1px solid #1e293b}
+  .stat-cell:last-child{border-right:none}
+  .stat-lbl{color:#1e3a5f;font-size:8px;letter-spacing:2px;text-transform:uppercase}
+  .stat-val{color:#94a3b8;font-size:12px;font-weight:700;margin-top:1px}
+  #tabContent{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+  #routeTab,#dashTab{display:none;flex:1;flex-direction:column}
+  #routeTab.active,#dashTab.active{display:flex}
+  #stepControls{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#0d1520;border-bottom:1px solid #1e293b;flex-shrink:0}
+  #stepList{flex:1;overflow-y:auto}
+  .step-row{display:flex;gap:12px;padding:11px 16px;border-bottom:1px solid #060d1a;cursor:pointer;border-left:3px solid transparent}
+  .step-row.active-step{background:#0d2040;border-left-color:#3b82f6}
 
-  const retake = () => setCaptured(null);
+  /* Stats page */
+  #statsScreen{background:#080e1a;background-image:radial-gradient(ellipse at 50% 0%,#0d2040 0%,#080e1a 70%)}
+  #statsScreen .content{flex:1;overflow-y:auto;padding:20px 18px;display:flex;flex-direction:column;gap:16px}
 
-  const confirm = () => {
-    if (!captured) return;
-    // Convert data URL to File
-    const byteString = atob(captured.split(",")[1]);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-    const blob = new Blob([ab], { type: "image/jpeg" });
-    const file = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
-    onCapture(file, captured);
-  };
+  /* Modal */
+  #gasModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);align-items:center;justify-content:center;z-index:800;padding:20px}
+  #gasModal.open{display:flex}
+  #gasModalBox{background:#0d1520;border:1px solid #1e3a5f;border-radius:16px;padding:24px;width:100%;max-width:320px}
 
-  return (
-    <div
-      style={{
-        position: "fixed", inset: 0, zIndex: 1000,
-        background: "rgba(0,0,0,0.85)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 16,
-      }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div
-        style={{
-          background: "#1C1814", borderRadius: 20, overflow: "hidden",
-          width: "100%", maxWidth: 600,
-          boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
-        }}
-      >
-        {/* Modal Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #2E2824" }}>
-          <span style={{ color: "#F4EFE8", fontFamily: "'Cormorant Garamond', serif", fontSize: "1.2rem", fontWeight: 400 }}>
-            Take Photo
-          </span>
-          <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={flipCamera} title="Flip camera"
-              style={{ background: "#2E2824", border: "none", borderRadius: 8, padding: "6px 12px", color: "#C9B99A", cursor: "pointer", fontSize: 18 }}>
-              🔄
-            </button>
-            <button onClick={onClose}
-              style={{ background: "#2E2824", border: "none", borderRadius: 8, padding: "6px 12px", color: "#C9B99A", cursor: "pointer", fontSize: 18 }}>
-              ✕
-            </button>
-          </div>
+  /* Speed sign */
+  .speed-sign{display:inline-flex;flex-direction:column;align-items:center;border:4px solid #e2e8f0;border-radius:12px;padding:14px 28px;min-width:110px}
+  .speed-num{color:#e2e8f0;font-size:52px;font-weight:900;line-height:1}
+
+  /* Odometer */
+  .odo-num{font-size:72px;font-weight:900;color:#e2e8f0;letter-spacing:-3px;line-height:1}
+
+  /* Dir icon */
+  .dir-big{font-size:50px;line-height:1;flex-shrink:0}
+  .dir-ghost{position:absolute;right:-10px;top:-20px;font-size:110px;opacity:0.06;line-height:1;pointer-events:none}
+</style>
+</head>
+<body>
+
+<!-- STATS FLOATING BUTTON -->
+<button id="statsBtn" onclick="goToStats()" style="display:none">STATS</button>
+
+<!-- ═══ PERMISSIONS SCREEN ═══ -->
+<div id="permScreen" class="screen active">
+  <div style="text-align:center;margin-bottom:36px">
+    <div style="font-size:56px;margin-bottom:12px">🗺️</div>
+    <div style="font-size:26px;font-weight:900;font-family:Georgia,serif">Road Navigator</div>
+    <div style="font-size:12px;color:#475569;margin-top:5px">Live GPS · Voice · Low-speed roads only</div>
+  </div>
+  <div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px">
+    <!-- Location -->
+    <div class="perm-card" id="locCard" style="border:1px solid #1e3a5f">
+      <div class="perm-row" id="locRow">
+        <div class="perm-icon">📍</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:14px">Location Access</div>
+          <div style="color:#475569;font-size:12px">Required for live GPS tracking</div>
         </div>
-
-        {/* Viewfinder */}
-        <div style={{ position: "relative", background: "#000", aspectRatio: "4/3", maxHeight: 420, overflow: "hidden" }}>
-          {camError ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: 32, textAlign: "center", color: "#C9B99A", fontSize: 14, lineHeight: 1.6 }}>
-              <div>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>📷</div>
-                {camError}
-              </div>
-            </div>
-          ) : (
-            <>
-              <video
-                ref={videoRef}
-                autoPlay playsInline muted
-                style={{
-                  width: "100%", height: "100%", objectFit: "cover",
-                  display: captured ? "none" : "block",
-                  transform: facingMode === "user" ? "scaleX(-1)" : "none",
-                }}
-              />
-              {captured && (
-                <img src={captured} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-              )}
-              {!ready && !captured && !camError && (
-                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#C9B99A", fontSize: 13 }}>
-                  Starting camera…
-                </div>
-              )}
-              {/* Corner guides */}
-              {!captured && ready && (
-                <>
-                  {[["0%","0%","borderTop","borderLeft"],["0%","auto","borderTop","borderRight"],["auto","0%","borderBottom","borderLeft"],["auto","auto","borderBottom","borderRight"]].map(([t,r,b1,b2],i) => (
-                    <div key={i} style={{ position:"absolute", top: t === "auto" ? undefined : 16, bottom: t === "auto" ? 16 : undefined, left: r === "auto" ? undefined : 16, right: r === "auto" ? 16 : undefined, width:24, height:24, borderColor:"rgba(255,255,255,0.6)", borderStyle:"solid", borderWidth:0, [b1+"Width"]: 2, [b2+"Width"]: 2 }} />
-                  ))}
-                </>
-              )}
-            </>
-          )}
+        <div id="locIcon" style="font-size:20px"></div>
+      </div>
+      <button id="locBtn" class="btn-blue" onclick="requestLocation()" style="margin-top:0">Allow Location</button>
+    </div>
+    <!-- Voice -->
+    <div class="perm-card" id="voiceCard" style="border:1px solid #1e3a5f">
+      <div class="perm-row" id="voiceRow">
+        <div class="perm-icon">🔊</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:14px">Voice Directions</div>
+          <div style="color:#475569;font-size:12px">Spoken turn-by-turn announcements</div>
         </div>
-        <canvas ref={canvasRef} style={{ display: "none" }} />
+        <div id="voiceIcon" style="font-size:20px">💤</div>
+      </div>
+      <button id="voiceBtn" class="btn-dim" style="width:100%;padding:12px 0;font-size:13px;border-radius:9px" onclick="enableVoice()">Enable Voice Directions</button>
+    </div>
+    <button id="continueBtn" class="btn-blue" style="opacity:0.4;pointer-events:none" onclick="goHome()">Allow Location to Continue</button>
+    <button onclick="goHome()" style="background:none;border:none;color:#334155;font-size:12px;cursor:pointer;padding:4px 0;font-family:'Courier New',monospace">Skip · Use manual mode</button>
+  </div>
+</div>
 
-        {/* Controls */}
-        <div style={{ padding: "20px 24px", display: "flex", gap: 12, justifyContent: "center", alignItems: "center" }}>
-          {!captured ? (
-            <button
-              onClick={capture}
-              disabled={!ready || !!camError}
-              style={{
-                width: 64, height: 64, borderRadius: "50%",
-                background: ready && !camError ? "#B5723A" : "#3E3430",
-                border: "3px solid #C9B99A",
-                cursor: ready && !camError ? "pointer" : "default",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 26, transition: "all 0.15s",
-                boxShadow: ready ? "0 0 0 6px rgba(181,114,58,0.25)" : "none",
-              }}
-            >
-              📷
-            </button>
-          ) : (
-            <div style={{ display: "flex", gap: 12, width: "100%", justifyContent: "center" }}>
-              <button onClick={retake}
-                style={{ flex: 1, maxWidth: 160, padding: "12px", borderRadius: 10, background: "#2E2824", border: "1px solid #4E4440", color: "#C9B99A", cursor: "pointer", fontSize: 14, fontFamily: "'DM Sans', sans-serif" }}>
-                ↩ Retake
-              </button>
-              <button onClick={confirm}
-                style={{ flex: 1, maxWidth: 160, padding: "12px", borderRadius: 10, background: "#B5723A", border: "none", color: "white", cursor: "pointer", fontSize: 14, fontFamily: "'DM Sans', sans-serif", fontWeight: 500 }}>
-                Use Photo ✓
-              </button>
-            </div>
-          )}
+<!-- ═══ HOME SCREEN ═══ -->
+<div id="homeScreen" class="screen">
+  <div style="margin-bottom:28px;text-align:center;padding-top:8px">
+    <div style="font-size:10px;color:#3b82f6;letter-spacing:5px;text-transform:uppercase;margin-bottom:6px">Road Navigator</div>
+    <div style="font-size:28px;font-weight:900;font-family:Georgia,serif;letter-spacing:-1px">Low-Speed Routes</div>
+    <div style="font-size:11px;color:#334155;margin-top:4px">Local roads only · No highways</div>
+  </div>
+  <div class="card">
+    <div style="color:#3b82f6;font-size:10px;letter-spacing:3px;text-transform:uppercase">Route Setup</div>
+    <div>
+      <div class="lbl">From</div>
+      <div style="position:relative">
+        <input class="inp" id="fromInput" type="text" placeholder="Start address or city" style="padding-right:40px">
+        <button onclick="useMyLocation()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:#3b82f6;padding:2px" id="locPinBtn">📍</button>
+      </div>
+    </div>
+    <div>
+      <div class="lbl">To</div>
+      <input class="inp" id="toInput" type="text" placeholder="Destination">
+    </div>
+    <div>
+      <div class="lbl">Max Speed Limit</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <input class="inp" id="speedInput" type="number" value="45" style="width:72px;text-align:center;font-size:18px;font-weight:700">
+        <span style="color:#475569;font-size:12px">MPH — avoids faster roads</span>
+      </div>
+    </div>
+    <div id="routeError" style="display:none;color:#f87171;font-size:12px;padding:8px 10px;background:#1c0505;border-radius:7px;border:1px solid #7f1d1d"></div>
+    <button class="btn-blue" id="startBtn" onclick="startNav()">START NAVIGATION →</button>
+  </div>
+  <div class="card">
+    <div style="color:#3b82f6;font-size:10px;letter-spacing:3px;text-transform:uppercase">⛽ Fuel Setup</div>
+    <div style="display:flex;gap:12px">
+      <div style="flex:1">
+        <div class="lbl">MPG</div>
+        <input class="inp" id="mpgInput" type="number" placeholder="e.g. 30">
+      </div>
+      <div style="flex:1">
+        <div class="lbl">$/Gallon</div>
+        <div style="position:relative">
+          <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#475569;font-size:14px">$</span>
+          <input class="inp" id="ppgInput" type="number" placeholder="3.49" style="padding-left:24px">
         </div>
       </div>
     </div>
-  );
+    <div>
+      <div class="lbl">Total Gas ($)</div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1;position:relative">
+          <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#475569;font-size:14px">$</span>
+          <input class="inp" id="dollarsInput" type="number" placeholder="e.g. 40.00" style="padding-left:24px" oninput="updateGasBar()">
+        </div>
+        <button class="btn-dim" style="padding:0 14px;font-size:18px;border-radius:8px" onclick="openGasModal()">⇄</button>
+      </div>
+    </div>
+    <div id="gasBarHome" style="display:none">
+      <div class="gasbar"><span style="font-size:16px">⛽</span><div class="gasbar-segs" id="gasSegsHome"></div><span id="gasPctHome" style="font-size:12px;color:#64748b;min-width:36px;text-align:right">100%</span></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;color:#334155;font-size:10px">
+        <span id="gasGalHome"></span><span id="gasRangeHome"></span>
+      </div>
+    </div>
+  </div>
+  <button onclick="showScreen('permScreen')" style="background:none;border:none;color:#334155;font-size:11px;cursor:pointer;padding:4px 0;margin-bottom:20px">⚙ Manage permissions</button>
+</div>
+
+<!-- ═══ NAV SCREEN ═══ -->
+<div id="navScreen" class="screen navscreen">
+  <div id="navTabBar">
+    <button class="nav-tab active" id="tabRoute" onclick="switchTab('route')"><span style="font-size:16px">📍</span> Route</button>
+    <div style="width:1px;background:#1e293b;margin:8px 0"></div>
+    <button class="nav-tab" id="tabDash" onclick="switchTab('dash')"><span style="font-size:16px">🚗</span> Dashboard</button>
+  </div>
+  <div id="stepBanner" style="background:#1a3a6e">
+    <div class="dir-ghost" id="bannerGhost">↑</div>
+    <div id="distCountdown" style="font-size:26px;font-weight:900;color:white;letter-spacing:-1px;margin-bottom:4px;line-height:1;display:none"></div>
+    <div style="display:flex;gap:14px;align-items:center;position:relative">
+      <div class="dir-big" id="curIcon">↑</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:2px;text-transform:uppercase;margin-bottom:3px" id="curLabel">Continue straight</div>
+        <div style="font-size:18px;font-weight:700;color:white;line-height:1.25;word-break:break-word" id="curInstruction">—</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px" id="curSpeed"></div>
+      </div>
+    </div>
+    <div id="nextPreview" style="display:none;margin-top:10px;padding:7px 12px;background:rgba(0,0,0,0.3);border-radius:8px;font-size:12px;color:rgba(255,255,255,0.55)"></div>
+  </div>
+  <div id="progressBar"><div id="progressFill" style="width:0%"></div></div>
+  <div id="statsBar">
+    <div class="stat-cell"><div class="stat-lbl">Speed</div><div class="stat-val" id="gpsSpeedDisp">–</div></div>
+    <div class="stat-cell"><div class="stat-lbl">Total</div><div class="stat-val" id="totalDistDisp">—</div></div>
+    <div class="stat-cell"><div class="stat-lbl">ETA</div><div class="stat-val" id="etaDisp">—</div></div>
+  </div>
+  <div id="tabContent">
+    <div id="routeTab" class="active">
+      <div id="stepControls">
+        <button id="prevBtn" class="btn-dim" style="padding:6px 12px;font-size:12px;border-radius:7px;border:1px solid #0f1f35;color:#1e3a5f" onclick="prevStep()">◀ Prev</button>
+        <div style="flex:1;text-align:center">
+          <span id="stepCounter" style="color:#334155;font-size:10px">Step 1/1</span>
+          <span id="gpsIndicator" style="margin-left:8px;color:#334155;font-size:10px">○ No GPS</span>
+        </div>
+        <button id="voiceToggleBtn" class="btn-dim" style="padding:6px 10px;font-size:16px;border-radius:7px;border:1px solid #2d4a6b" onclick="toggleVoice()">🔇</button>
+        <button id="nextBtn" class="btn-dim" style="padding:6px 12px;font-size:12px;border-radius:7px;border:1px solid #2d4a6b" onclick="nextStep()">Next ▶</button>
+      </div>
+      <div id="stepList"></div>
+    </div>
+    <div id="dashTab">
+      <div style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px">
+        <!-- Odometer -->
+        <div class="card" style="text-align:center;margin-bottom:0">
+          <div class="lbl" style="letter-spacing:4px;text-align:center">Odometer</div>
+          <div class="odo-num" id="dashOdo">0.0</div>
+          <div style="color:#334155;font-size:13px;margin-top:4px;letter-spacing:2px">MILES</div>
+          <div style="display:flex;justify-content:center;gap:8px;margin-top:14px">
+            <button class="btn-dim" style="padding:7px 16px;border-radius:7px;font-size:12px" ontouchstart="holdStart(0.1)" ontouchend="holdEnd()" onmousedown="holdStart(0.1)" onmouseup="holdEnd()" onmouseleave="holdEnd()" onclick="addMile(0.1)">+0.1</button>
+            <button class="btn-dim" style="padding:7px 16px;border-radius:7px;font-size:12px" ontouchstart="holdStart(1)" ontouchend="holdEnd()" onmousedown="holdStart(1)" onmouseup="holdEnd()" onmouseleave="holdEnd()" onclick="addMile(1)">+1</button>
+          </div>
+          <button onclick="resetMiles()" style="margin-top:10px;background:#1c0505;border:1px solid #7f1d1d;border-radius:8px;color:#ef4444;padding:9px 28px;cursor:pointer;font-size:11px;font-family:'Courier New',monospace;letter-spacing:2px;text-transform:uppercase;font-weight:700">↺ Reset to Zero</button>
+        </div>
+        <!-- Gas -->
+        <div class="card" style="margin-bottom:0">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="color:#3b82f6;font-size:10px;letter-spacing:3px;text-transform:uppercase">⛽ Fuel Range</div>
+            <button class="btn-dim" style="padding:4px 12px;border-radius:7px;font-size:11px;border:none" onclick="openGasModal()">⇄ Edit</button>
+          </div>
+          <div id="dashGasContent">
+            <div style="color:#334155;font-size:12px;text-align:center;padding:12px 0">Set up fuel on home screen</div>
+          </div>
+        </div>
+        <!-- Next direction -->
+        <div class="card" id="dashNextCard" style="display:none;margin-bottom:0">
+          <div style="color:#3b82f6;font-size:10px;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px">Next Direction</div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="font-size:38px;line-height:1" id="dashNextIcon">↑</div>
+            <div>
+              <div style="color:#94a3b8;font-size:9px;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px" id="dashNextLabel"></div>
+              <div style="color:#e2e8f0;font-size:15px;font-weight:700" id="dashNextInstr"></div>
+              <div style="color:#334155;font-size:11px;margin-top:3px" id="dashNextMeta"></div>
+            </div>
+          </div>
+        </div>
+        <button onclick="showScreen('homeScreen')" style="background:none;border:1px solid #1e3a5f;border-radius:10px;color:#334155;padding:10px 0;cursor:pointer;font-size:10px;font-family:'Courier New',monospace;letter-spacing:1px;text-transform:uppercase">← New Route</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATS SCREEN ═══ -->
+<div id="statsScreen" class="screen">
+  <div style="display:flex;align-items:center;padding:16px 18px;border-bottom:1px solid #1e293b;background:#060d1a;flex-shrink:0">
+    <button onclick="goBack()" style="background:none;border:1px solid #1e3a5f;border-radius:8px;color:#64748b;padding:7px 14px;cursor:pointer;font-family:'Courier New',monospace;font-size:12px">← Back</button>
+    <div style="flex:1;text-align:center;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase">Stats</div>
+    <div style="width:60px"></div>
+  </div>
+  <div class="content" style="flex:1;overflow-y:auto;padding:20px 18px;display:flex;flex-direction:column;gap:16px">
+    <!-- Odometer -->
+    <div class="card" style="text-align:center;margin-bottom:0">
+      <div class="lbl" style="letter-spacing:4px;text-align:center">Odometer</div>
+      <div class="odo-num" id="statsOdo">0.0</div>
+      <div style="color:#334155;font-size:13px;margin-top:6px;letter-spacing:2px">MILES</div>
+      <div style="display:flex;justify-content:center;gap:10px;margin-top:18px">
+        <button class="btn-dim" style="padding:8px 20px;border-radius:8px;font-size:13px" ontouchstart="holdStart(0.1)" ontouchend="holdEnd()" onmousedown="holdStart(0.1)" onmouseup="holdEnd()" onmouseleave="holdEnd()" onclick="addMile(0.1)">+0.1</button>
+        <button class="btn-dim" style="padding:8px 20px;border-radius:8px;font-size:13px" ontouchstart="holdStart(1)" ontouchend="holdEnd()" onmousedown="holdStart(1)" onmouseup="holdEnd()" onmouseleave="holdEnd()" onclick="addMile(1)">+1</button>
+      </div>
+      <button onclick="resetMiles()" style="margin-top:14px;background:#1c0505;border:1px solid #7f1d1d;border-radius:9px;color:#ef4444;padding:10px 36px;cursor:pointer;font-size:12px;font-family:'Courier New',monospace;letter-spacing:2px;text-transform:uppercase;font-weight:700">↺ Reset to Zero</button>
+    </div>
+    <!-- Speed limit sign -->
+    <div class="card" style="text-align:center;margin-bottom:0">
+      <div class="lbl" style="letter-spacing:4px;text-align:center">Speed Limit</div>
+      <div class="speed-sign" style="margin:0 auto">
+        <div class="speed-num" id="statsSpeedNum">45</div>
+        <div style="color:#64748b;font-size:11px;letter-spacing:2px;margin-top:4px">MPH LIMIT</div>
+      </div>
+      <div style="color:#334155;font-size:11px;margin-top:10px" id="statsSpeedNote">No active route — showing your max</div>
+    </div>
+    <!-- Directions -->
+    <div class="card" style="margin-bottom:0">
+      <div style="color:#3b82f6;font-size:9px;letter-spacing:4px;text-transform:uppercase;margin-bottom:14px">Navigation</div>
+      <div id="statsNavContent">
+        <div style="color:#334155;font-size:13px;text-align:center;padding:20px 0;border:1px dashed #1e293b;border-radius:10px">No active route — start navigation from Home</div>
+      </div>
+    </div>
+    <!-- Voice -->
+    <div class="card" id="statsVoiceCard" style="margin-bottom:0">
+      <div style="color:#3b82f6;font-size:9px;letter-spacing:4px;text-transform:uppercase;margin-bottom:14px">Voice Directions</div>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div id="statsVoiceIcon" style="width:50px;height:50px;border-radius:12px;background:#0a1e3d;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;border:1px solid #1e3a5f">🔇</div>
+        <div>
+          <div style="font-size:15px;font-weight:700" id="statsVoiceLabel">Voice Off</div>
+          <div style="color:#475569;font-size:12px;margin-top:2px" id="statsVoiceSub">Tap to enable spoken directions</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button id="statsVoiceToggle" onclick="toggleVoice();updateStatsVoice()" style="flex:1;background:#1d4ed8;border:none;border-radius:10px;color:white;padding:12px 0;cursor:pointer;font-family:'Courier New',monospace;font-size:13px;font-weight:700">Turn On</button>
+        <button id="statsVoiceTest" onclick="testVoice()" style="display:none;flex:1;background:#0f4f2e;border:1px solid #15803d;border-radius:10px;color:#4ade80;padding:12px 0;cursor:pointer;font-family:'Courier New',monospace;font-size:13px">Test Voice</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ GAS MODAL ═══ -->
+<div id="gasModal">
+  <div id="gasModalBox">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px">Adjust MPG Equation</div>
+    <div style="color:#334155;font-size:11px;margin-bottom:18px" id="modalGallons">Gallons on hand: 0</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <div class="lbl">New MPG</div>
+        <input class="inp" id="modalMpg" type="number" placeholder="e.g. 28">
+      </div>
+      <div>
+        <div class="lbl">New $/Gallon</div>
+        <div style="position:relative">
+          <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#475569">$</span>
+          <input class="inp" id="modalPpg" type="number" placeholder="e.g. 3.79" style="padding-left:24px">
+        </div>
+      </div>
+      <div id="modalPreview" style="display:none;background:#080e1a;border:1px solid #1e3a5f;border-radius:8px;padding:10px 12px;color:#34d399;font-size:12px"></div>
+      <div style="display:flex;gap:10px">
+        <button onclick="closeGasModal()" style="flex:1;background:none;border:1px solid #334155;border-radius:8px;color:#64748b;padding:10px 0;cursor:pointer;font-family:'Courier New',monospace;font-size:12px">Cancel</button>
+        <button onclick="applyGasModal()" style="flex:1;background:#2563eb;border:none;border-radius:8px;color:white;padding:10px 0;cursor:pointer;font-weight:700;font-family:'Courier New',monospace;font-size:12px">Apply</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══ STATE ═══
+let voiceOn = false;
+let currentScreen = 'permScreen';
+let prevScreen = 'homeScreen';
+let route = null;
+let stepIndex = 0;
+let miles = 0;
+let holdTimer = null;
+let watchId = null;
+let stepDist = 0;
+let lastPos = null;
+let ann = { half: false, near: false };
+let distToTurn = null;
+let gpsActive = false;
+
+const ICONS = { left:'↰', right:'↱', straight:'↑', 'slight-left':'↖', 'slight-right':'↗', 'u-turn':'↩', arrive:'⚑' };
+const LABELS = { left:'Turn left', right:'Turn right', straight:'Continue straight', 'slight-left':'Bear left', 'slight-right':'Bear right', 'u-turn':'Make a U-turn', arrive:'Arrive at destination' };
+
+// ═══ UTILITIES ═══
+function parseMiles(s) {
+  if (!s) return 0;
+  const t = s.toLowerCase(), n = parseFloat(t);
+  if (isNaN(n)) return 0;
+  if (t.includes('ft') || t.includes('feet')) return n / 5280;
+  if (t.includes('km')) return n * 0.621371;
+  return n;
+}
+function haversine(la1,lo1,la2,lo2) {
+  const R=3958.8,r=Math.PI/180,dLa=(la2-la1)*r,dLo=(lo2-lo1)*r;
+  const a=Math.sin(dLa/2)**2+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)**2;
+  return R*2*Math.asin(Math.sqrt(a));
+}
+function fmtDist(mi) {
+  if (mi == null || isNaN(mi)) return '';
+  if (mi < 0.1) return Math.round(mi*5280)+' ft';
+  return mi.toFixed(1)+' mi';
+}
+function say(text) {
+  if (!voiceOn || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate=1.0; u.pitch=1.0; u.volume=1.0;
+  speechSynthesis.speak(u);
 }
 
-const toBase64 = (file) =>
-  new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result.split(",")[1]);
-    r.onerror = rej;
-    r.readAsDataURL(file);
+// ═══ SCREENS ═══
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  currentScreen = id;
+  const btn = document.getElementById('statsBtn');
+  btn.style.display = (id === 'statsScreen' || id === 'permScreen') ? 'none' : 'block';
+  if (id === 'navScreen') startGPS();
+  else stopGPS();
+  if (id === 'statsScreen') refreshStats();
+}
+function goToStats() { prevScreen = currentScreen; showScreen('statsScreen'); }
+function goBack() { showScreen(prevScreen); }
+function goHome() { showScreen('homeScreen'); }
+
+// ═══ PERMISSIONS ═══
+function requestLocation() {
+  const btn = document.getElementById('locBtn');
+  btn.textContent = 'Requesting location…';
+  btn.style.opacity = '0.6';
+  navigator.geolocation.getCurrentPosition(
+    function() { setLocOk(); },
+    function() { setLocDenied(); },
+    { timeout: 12000 }
+  );
+}
+function setLocOk() {
+  document.getElementById('locCard').style.borderColor = '#15803d';
+  document.getElementById('locIcon').textContent = '✅';
+  document.getElementById('locBtn').style.display = 'none';
+  const cb = document.getElementById('continueBtn');
+  cb.textContent = 'CONTINUE →';
+  cb.style.opacity = '1';
+  cb.style.pointerEvents = 'auto';
+}
+function setLocDenied() {
+  document.getElementById('locIcon').textContent = '❌';
+  document.getElementById('locBtn').textContent = 'Denied — check browser settings';
+  document.getElementById('locBtn').style.background = '#450a0a';
+  document.getElementById('locBtn').style.color = '#f87171';
+  document.getElementById('locBtn').disabled = true;
+  const cb = document.getElementById('continueBtn');
+  cb.textContent = 'CONTINUE WITHOUT GPS →';
+  cb.style.opacity = '1';
+  cb.style.pointerEvents = 'auto';
+}
+function enableVoice() {
+  voiceOn = true;
+  say('Voice navigation is ready.');
+  document.getElementById('voiceCard').style.borderColor = '#15803d';
+  document.getElementById('voiceIcon').textContent = '✅';
+  document.getElementById('voiceBtn').textContent = 'Voice Ready ✓ — Test Again';
+  document.getElementById('voiceBtn').style.background = '#0f4f2e';
+  document.getElementById('voiceBtn').style.color = '#4ade80';
+  document.getElementById('voiceBtn').style.border = '1px solid #15803d';
+}
+
+// ═══ LOCATION PIN ═══
+async function useMyLocation() {
+  const btn = document.getElementById('locPinBtn');
+  btn.textContent = '⏳';
+  navigator.geolocation.getCurrentPosition(async function(pos) {
+    try {
+      const r = await fetch('https://installed-eng-islands-divx.trycloudflare.com/nominatim/reverse?lat='+pos.coords.latitude+'&lon='+pos.coords.longitude+'&format=json',{headers:{'User-Agent':'RoadNavigator/1.0'}});
+      const d = await r.json();
+      const a = d.address||{};
+      const parts = [a.house_number,a.road,a.city||a.town||a.village].filter(Boolean);
+      document.getElementById('fromInput').value = parts.length>0?parts.join(' '):d.display_name;
+    } catch(e) {
+      document.getElementById('fromInput').value = pos.coords.latitude.toFixed(5)+', '+pos.coords.longitude.toFixed(5);
+    }
+    btn.textContent = '📍';
+  }, function(){ btn.textContent = '📍'; }, {timeout:8000});
+}
+
+// ═══ ROUTE FETCH ═══
+async function startNav() {
+  const from = document.getElementById('fromInput').value.trim();
+  const to = document.getElementById('toInput').value.trim();
+  const maxMph = document.getElementById('speedInput').value || '45';
+  const errEl = document.getElementById('routeError');
+  const btn = document.getElementById('startBtn');
+  if (!from || !to) { showError('Enter both start and destination.'); return; }
+  btn.textContent = 'CALCULATING ROUTE…';
+  btn.style.background = '#1e3a5f';
+  btn.style.color = '#334155';
+  errEl.style.display = 'none';
+  try {
+    const prompt = 'Generate real step-by-step driving directions from "'+from+'" to "'+to+'". STRICT RULE: Only use roads with speed limits of '+maxMph+' MPH or less. No highways or interstates. Respond with ONLY a JSON object. No explanation. No markdown. No code blocks. Just the raw JSON:\n{"totalDistance":"X.X miles","estimatedTime":"Xh Xmin","steps":[{"instruction":"Head north on Main St","distance":"0.3 mi","road":"Main St","speedLimit":30,"dir":"straight"}]}\ndir must be one of: left, right, straight, slight-left, slight-right, u-turn, arrive\nEvery step speedLimit must be '+maxMph+' or less. Use real street names.';
+    const res = await fetch('https://installed-eng-islands-divx.trycloudflare.com/proxy', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1500, tools:[{type:'web_search_20250305',name:'web_search'}], messages:[{role:'user',content:prompt}] })
+    });
+    if (!res.ok) throw new Error('API error '+res.status);
+    const data = await res.json();
+    let txt = '';
+    (data.content||[]).forEach(function(b){ if(b.type==='text') txt+=b.text; });
+    txt = txt.replace(/```json/gi,'').replace(/```/g,'').trim();
+    const s=txt.indexOf('{'), e=txt.lastIndexOf('}');
+    if(s===-1||e===-1) throw new Error('No route data returned. Try different locations.');
+    const parsed = JSON.parse(txt.slice(s,e+1));
+    if(!parsed.steps||!parsed.steps.length) throw new Error('Route has no steps.');
+    route = parsed;
+    stepIndex = 0;
+    stepDist = 0;
+    lastPos = null;
+    ann = {half:false,near:false};
+    distToTurn = parseMiles(route.steps[0].distance);
+    renderNav();
+    say('Starting navigation. '+route.steps[0].instruction);
+    showScreen('navScreen');
+  } catch(e) {
+    showError(e.message||'Could not get route. Try different locations.');
+  }
+  btn.textContent = 'START NAVIGATION →';
+  btn.style.background = '#2563eb';
+  btn.style.color = 'white';
+}
+function showError(msg) {
+  const el = document.getElementById('routeError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ═══ NAV RENDER ═══
+function renderNav() {
+  if (!route) return;
+  const steps = route.steps;
+  const cur = steps[stepIndex]||{};
+  const nxt = steps[stepIndex+1]||null;
+
+  // Banner
+  const bg = cur.dir==='arrive'?'#14532d':'#1a3a6e';
+  document.getElementById('stepBanner').style.background = bg;
+  document.getElementById('bannerGhost').textContent = ICONS[cur.dir]||'↑';
+  document.getElementById('curIcon').textContent = ICONS[cur.dir]||'↑';
+  document.getElementById('curLabel').textContent = LABELS[cur.dir]||'Continue';
+  document.getElementById('curInstruction').textContent = cur.instruction||'—';
+  document.getElementById('curSpeed').textContent = (cur.speedLimit?cur.speedLimit+' mph zone':'');
+
+  // Dist countdown
+  const dc = document.getElementById('distCountdown');
+  if (distToTurn != null && stepIndex < steps.length-1) {
+    dc.style.display = 'block';
+    dc.innerHTML = fmtDist(distToTurn)+'<span style="font-size:12px;color:rgba(255,255,255,0.4);font-weight:400;margin-left:8px">'+cur.road+'</span>';
+  } else { dc.style.display = 'none'; }
+
+  // Next preview
+  const np = document.getElementById('nextPreview');
+  if (nxt) {
+    np.style.display = 'block';
+    np.innerHTML = '<span style="opacity:0.45">Then</span> <span style="flex:1">'+(ICONS[nxt.dir]||'↑')+' '+nxt.instruction+'</span> <span style="opacity:0.45;float:right">'+nxt.distance+'</span>';
+  } else { np.style.display = 'none'; }
+
+  // Progress
+  const pct = ((stepIndex+1)/Math.max(steps.length,1)*100);
+  document.getElementById('progressFill').style.width = pct+'%';
+
+  // Stats bar
+  document.getElementById('totalDistDisp').textContent = route.totalDistance||'—';
+  document.getElementById('etaDisp').textContent = route.estimatedTime||'—';
+
+  // Step counter
+  document.getElementById('stepCounter').textContent = 'Step '+(stepIndex+1)+'/'+steps.length;
+
+  // Prev/Next buttons
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  if (stepIndex===0) { prevBtn.style.color='#1e3a5f'; prevBtn.style.borderColor='#0f1f35'; prevBtn.disabled=true; }
+  else { prevBtn.style.color='#94a3b8'; prevBtn.style.borderColor='#2d4a6b'; prevBtn.disabled=false; }
+  if (stepIndex>=steps.length-1) { nextBtn.style.color='#1e3a5f'; nextBtn.style.borderColor='#0f1f35'; nextBtn.disabled=true; }
+  else { nextBtn.style.color='#94a3b8'; nextBtn.style.borderColor='#2d4a6b'; nextBtn.disabled=false; }
+
+  // Step list
+  const list = document.getElementById('stepList');
+  list.innerHTML = '';
+  steps.forEach(function(s,i) {
+    const row = document.createElement('div');
+    row.className = 'step-row'+(i===stepIndex?' active-step':'');
+    row.onclick = function(){ stepIndex=i; renderNav(); };
+    row.innerHTML = '<div style="width:24px;font-size:18px;text-align:center;flex-shrink:0;opacity:'+(i===stepIndex?'1':'0.3')+'">'+(ICONS[s.dir]||'↑')+'</div>'+
+      '<div style="flex:1;min-width:0"><div style="color:'+(i===stepIndex?'#e2e8f0':'#475569')+';font-size:13px;line-height:1.35">'+s.instruction+'</div>'+
+      '<div style="color:#1e3a5f;font-size:10px;margin-top:2px">'+s.distance+' · '+s.road+' · '+s.speedLimit+' mph</div></div>'+
+      (i<stepIndex?'<span style="color:#22c55e;font-size:14px;align-self:center;flex-shrink:0">✓</span>':'')+
+      (i===stepIndex?'<span style="color:#3b82f6;font-size:18px;align-self:center;flex-shrink:0">›</span>':'');
+    list.appendChild(row);
   });
 
-const mime = (f) =>
-  ["image/jpeg", "image/png", "image/gif", "image/webp"].includes(f.type)
-    ? f.type
-    : "image/jpeg";
+  // Dashboard next card
+  const dnc = document.getElementById('dashNextCard');
+  if (nxt) {
+    dnc.style.display = 'block';
+    document.getElementById('dashNextIcon').textContent = ICONS[nxt.dir]||'↑';
+    document.getElementById('dashNextLabel').textContent = LABELS[nxt.dir]||'';
+    document.getElementById('dashNextInstr').textContent = nxt.instruction;
+    document.getElementById('dashNextMeta').textContent = nxt.distance+' · '+nxt.road+' · '+nxt.speedLimit+' mph';
+  } else { dnc.style.display = 'none'; }
 
-const COLORS = {
-  bg: "#F4EFE8",
-  card: "#FDFAF6",
-  border: "#E0D8CE",
-  accent: "#B5723A",
-  accentLight: "#F0E4D4",
-  text: "#26201C",
-  muted: "#8C7B6E",
-  white: "#FDFAF6",
-};
-
-const css = (obj) => obj;
-
-function CameraBtn({ onClick }) {
-  return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      title="Use camera"
-      style={{
-        display: "flex", alignItems: "center", gap: 5,
-        padding: "5px 12px",
-        borderRadius: 20,
-        border: `1px solid ${COLORS.border}`,
-        background: COLORS.card,
-        color: COLORS.accent,
-        fontSize: 12,
-        fontFamily: "'DM Sans', sans-serif",
-        fontWeight: 500,
-        cursor: "pointer",
-        transition: "all 0.15s",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.accentLight; e.currentTarget.style.borderColor = COLORS.accent; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = COLORS.card; e.currentTarget.style.borderColor = COLORS.border; }}
-    >
-      📷 Camera
-    </button>
-  );
+  // Odometer
+  document.getElementById('dashOdo').textContent = miles.toFixed(1);
+  updateDashGas();
 }
 
-export default function WallArranger() {
-  const [roomFile, setRoomFile] = useState(null);
-  const [roomPreview, setRoomPreview] = useState(null);
-  const [itemFiles, setItemFiles] = useState([]);
-  const [itemPreviews, setItemPreviews] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [arrangements, setArrangements] = useState(null);
-  const [active, setActive] = useState(0);
-  const [error, setError] = useState(null);
-  const [dragRoom, setDragRoom] = useState(false);
-  const [dragItems, setDragItems] = useState(false);
-  const [cameraTarget, setCameraTarget] = useState(null); // "room" | "item"
+function prevStep() { if(stepIndex>0){stepIndex--;dist=parseMiles(route.steps[stepIndex].distance);distToTurn=dist;renderNav();} }
+function nextStep() { if(route&&stepIndex<route.steps.length-1){stepIndex++;distToTurn=parseMiles(route.steps[stepIndex].distance);ann={half:false,near:false};renderNav();} }
 
-  const roomRef = useRef();
-  const itemsRef = useRef();
+// ═══ TABS ═══
+function switchTab(tab) {
+  document.getElementById('tabRoute').classList.toggle('active', tab==='route');
+  document.getElementById('tabDash').classList.toggle('active', tab==='dash');
+  document.getElementById('routeTab').classList.toggle('active', tab==='route');
+  document.getElementById('dashTab').classList.toggle('active', tab==='dash');
+  if (tab==='dash') { document.getElementById('dashOdo').textContent=miles.toFixed(1); updateDashGas(); }
+}
 
-  const handleCameraCapture = (file, previewUrl) => {
-    setCameraTarget(null);
-    if (cameraTarget === "room") {
-      setRoomFile(file);
-      setRoomPreview(previewUrl);
-      setArrangements(null);
-    } else if (cameraTarget === "item") {
-      setItemFiles((p) => [...p, file].slice(0, 8));
-      setItemPreviews((p) => [...p, previewUrl].slice(0, 8));
-      setArrangements(null);
-    }
-  };
-
-  const handleRoom = (files) => {
-    const f = Array.from(files).find((x) => x.type.startsWith("image/"));
-    if (!f) return;
-    setRoomFile(f);
-    setRoomPreview(URL.createObjectURL(f));
-    setArrangements(null);
-  };
-
-  const handleItems = (files) => {
-    const imgs = Array.from(files).filter((x) => x.type.startsWith("image/"));
-    setItemFiles((p) => [...p, ...imgs].slice(0, 8));
-    setItemPreviews((p) =>
-      [...p, ...imgs.map((f) => URL.createObjectURL(f))].slice(0, 8)
-    );
-    setArrangements(null);
-  };
-
-  const removeItem = (i) => {
-    setItemFiles((p) => p.filter((_, idx) => idx !== i));
-    setItemPreviews((p) => p.filter((_, idx) => idx !== i));
-  };
-
-  const generate = async () => {
-    if (!roomFile || itemFiles.length === 0) return;
-    setLoading(true);
-    setError(null);
-    setArrangements(null);
-
-    try {
-      const roomB64 = await toBase64(roomFile);
-      const itemsData = await Promise.all(
-        itemFiles.map(async (f) => ({ data: await toBase64(f), type: mime(f) }))
-      );
-
-      const content = [
-        {
-          type: "image",
-          source: { type: "base64", media_type: mime(roomFile), data: roomB64 },
-        },
-        {
-          type: "text",
-          text: `This is the ROOM photo. The user wants to hang ${itemFiles.length} item(s) shown below.`,
-        },
-        ...itemsData.flatMap((item, i) => [
-          {
-            type: "image",
-            source: { type: "base64", media_type: item.type, data: item.data },
-          },
-          { type: "text", text: `Item ${i + 1}` },
-        ]),
-        {
-          type: "text",
-          text: `Return ONLY raw valid JSON (no markdown, no backticks) with exactly 3 distinct wall arrangement suggestions.
-
-Schema:
-{
-  "arrangements": [
-    {
-      "id": 1,
-      "name": "Short Creative Name",
-      "style": "Style Label",
-      "description": "Two sentences about this arrangement and why it works in this room.",
-      "placements": [
-        {
-          "itemIndex": 0,
-          "xPercent": 30,
-          "yPercent": 18,
-          "widthPercent": 20,
-          "heightPercent": 26,
-          "note": "One-line placement tip"
+// ═══ GPS ═══
+function startGPS() {
+  if (!navigator.geolocation) return;
+  if (watchId !== null) return;
+  watchId = navigator.geolocation.watchPosition(
+    function(pos) {
+      const lat=pos.coords.latitude, lon=pos.coords.longitude, spd=pos.coords.speed;
+      gpsActive = true;
+      document.getElementById('gpsIndicator').textContent = '● GPS';
+      document.getElementById('gpsIndicator').style.color = '#22c55e';
+      if (spd!=null) document.getElementById('gpsSpeedDisp').textContent = Math.round(spd*2.237)+' mph';
+      if (lastPos) {
+        const dist = haversine(lastPos.lat,lastPos.lon,lat,lon);
+        if (dist > 0.005) {
+          stepDist += dist;
+          miles = parseFloat((miles+dist).toFixed(2));
+          document.getElementById('dashOdo').textContent = miles.toFixed(1);
+          document.getElementById('statsOdo').textContent = miles.toFixed(1);
+          if (route) {
+            const cs = route.steps[stepIndex], ns = route.steps[stepIndex+1];
+            if (cs) {
+              const stepMi = parseMiles(cs.distance);
+              const rem = Math.max(0, stepMi-stepDist);
+              distToTurn = rem;
+              const dc = document.getElementById('distCountdown');
+              if (stepIndex < route.steps.length-1) {
+                dc.style.display='block';
+                dc.innerHTML = fmtDist(rem)+'<span style="font-size:12px;color:rgba(255,255,255,0.4);font-weight:400;margin-left:8px">'+cs.road+'</span>';
+              }
+              if (ns && rem<=0.5 && rem>0.3 && !ann.half) { ann.half=true; say('In half a mile, '+ns.instruction); }
+              if (ns && rem<=0.2 && rem>0.05 && !ann.near) { ann.near=true; say('In 0.2 miles, '+ns.instruction); }
+              if (stepDist >= Math.max(stepMi*0.88, stepMi-0.03)) {
+                stepDist=0; ann={half:false,near:false};
+                if (stepIndex < route.steps.length-1) {
+                  stepIndex++;
+                  const ni = route.steps[stepIndex];
+                  say(ni.dir==='arrive'?'You have arrived at your destination.':ni.instruction);
+                  distToTurn = parseMiles(ni.distance);
+                  renderNav();
+                }
+              }
+            }
+          }
         }
-      ]
-    }
-  ]
-}
-
-Rules:
-- xPercent/yPercent = top-left corner as % of the room image (0–100)
-- widthPercent/heightPercent = item size as % of room image dimensions
-- Place ALL ${itemFiles.length} item(s) in each arrangement on actual visible wall space
-- Items must NOT overlap; keep them on walls (above furniture, empty wall areas)
-- All 3 arrangements should feel genuinely different in concept
-- Keep items realistically sized relative to the room
-- xPercent + widthPercent < 95 and yPercent + heightPercent < 90`,
-        },
-      ];
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{ role: "user", content }],
-        }),
-      });
-
-      const data = await res.json();
-      const raw = (data.content || []).map((b) => b.text || "").join("");
-      const clean = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-      setArrangements(parsed.arrangements);
-      setActive(0);
-    } catch (e) {
-      setError("Couldn't generate arrangements. Please try again.");
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const canGen = roomFile && itemFiles.length > 0 && !loading;
-
-  return (
-    <div
-      style={{
-        fontFamily: "'DM Sans', sans-serif",
-        background: COLORS.bg,
-        minHeight: "100vh",
-        color: COLORS.text,
-        padding: "0 0 80px",
-      }}
-    >
-      {cameraTarget && (
-        <CameraModal
-          onCapture={handleCameraCapture}
-          onClose={() => setCameraTarget(null)}
-        />
-      )}
-      {/* Header */}
-      <div
-        style={{
-          borderBottom: `1px solid ${COLORS.border}`,
-          padding: "28px 40px 24px",
-          background: COLORS.card,
-          display: "flex",
-          alignItems: "baseline",
-          gap: 16,
-        }}
-      >
-        <span style={{ fontSize: 22 }}>🖼</span>
-        <div>
-          <h1
-            style={{
-              fontFamily: "'Cormorant Garamond', serif",
-              fontSize: "2rem",
-              fontWeight: 400,
-              letterSpacing: "-0.01em",
-              color: COLORS.text,
-              lineHeight: 1,
-            }}
-          >
-            Wall Arranger
-          </h1>
-          <p
-            style={{
-              fontSize: 13,
-              color: COLORS.muted,
-              marginTop: 4,
-              fontWeight: 300,
-            }}
-          >
-            Upload a room photo + items to hang. AI generates three distinct arrangements.
-          </p>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "36px 24px 0" }}>
-        {/* Upload Row */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-          {/* Room Upload */}
-          <div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <label
-                style={{
-                  fontSize: 11,
-                  fontWeight: 500,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: COLORS.muted,
-                }}
-              >
-                Your Room
-              </label>
-              <CameraBtn onClick={() => setCameraTarget("room")} />
-            </div>
-            <div
-              onClick={() => roomRef.current.click()}
-              onDragOver={(e) => { e.preventDefault(); setDragRoom(true); }}
-              onDragLeave={() => setDragRoom(false)}
-              onDrop={(e) => { e.preventDefault(); setDragRoom(false); handleRoom(e.dataTransfer.files); }}
-              style={{
-                border: `2px dashed ${dragRoom ? COLORS.accent : COLORS.border}`,
-                borderRadius: 12,
-                background: dragRoom ? COLORS.accentLight : COLORS.card,
-                cursor: "pointer",
-                overflow: "hidden",
-                transition: "all 0.2s",
-                minHeight: 220,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {roomPreview ? (
-                <img
-                  src={roomPreview}
-                  style={{ width: "100%", height: 220, objectFit: "cover", display: "block" }}
-                />
-              ) : (
-                <div style={{ textAlign: "center", padding: 32, color: COLORS.muted }}>
-                  <div style={{ fontSize: 36, marginBottom: 10 }}>🏠</div>
-                  <div style={{ fontSize: 14, fontWeight: 400 }}>Click or drop room photo</div>
-                  <div style={{ fontSize: 12, marginTop: 4 }}>or use the 📷 button above</div>
-                </div>
-              )}
-            </div>
-            <input
-              ref={roomRef}
-              type="file"
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={(e) => handleRoom(e.target.files)}
-            />
-            {roomPreview && (
-              <button
-                onClick={() => { setRoomFile(null); setRoomPreview(null); setArrangements(null); }}
-                style={{
-                  marginTop: 8,
-                  fontSize: 12,
-                  color: COLORS.muted,
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: 0,
-                  textDecoration: "underline",
-                }}
-              >
-                Remove photo
-              </button>
-            )}
-          </div>
-
-          {/* Items Upload */}
-          <div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <label
-                style={{
-                  fontSize: 11,
-                  fontWeight: 500,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: COLORS.muted,
-                }}
-              >
-                Items to Hang{" "}
-                <span style={{ fontWeight: 300, textTransform: "none", letterSpacing: 0 }}>
-                  (up to 8)
-                </span>
-              </label>
-              <CameraBtn onClick={() => setCameraTarget("item")} />
-            </div>
-            <div
-              onClick={() => itemsRef.current.click()}
-              onDragOver={(e) => { e.preventDefault(); setDragItems(true); }}
-              onDragLeave={() => setDragItems(false)}
-              onDrop={(e) => { e.preventDefault(); setDragItems(false); handleItems(e.dataTransfer.files); }}
-              style={{
-                border: `2px dashed ${dragItems ? COLORS.accent : COLORS.border}`,
-                borderRadius: 12,
-                background: dragItems ? COLORS.accentLight : COLORS.card,
-                cursor: "pointer",
-                minHeight: itemPreviews.length > 0 ? "auto" : 220,
-                transition: "all 0.2s",
-                padding: itemPreviews.length > 0 ? 12 : 0,
-                display: "flex",
-                alignItems: itemPreviews.length > 0 ? "flex-start" : "center",
-                justifyContent: "center",
-                flexWrap: "wrap",
-                gap: 8,
-              }}
-            >
-              {itemPreviews.length === 0 ? (
-                <div style={{ textAlign: "center", padding: 32, color: COLORS.muted }}>
-                  <div style={{ fontSize: 36, marginBottom: 10 }}>🖼️</div>
-                  <div style={{ fontSize: 14 }}>Click or drop artwork / photos</div>
-                  <div style={{ fontSize: 12, marginTop: 4 }}>Multiple files supported</div>
-                </div>
-              ) : (
-                <>
-                  {itemPreviews.map((src, i) => (
-                    <div
-                      key={i}
-                      style={{ position: "relative", width: 80, height: 80, flexShrink: 0 }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <img
-                        src={src}
-                        style={{
-                          width: 80,
-                          height: 80,
-                          objectFit: "cover",
-                          borderRadius: 8,
-                          border: `1px solid ${COLORS.border}`,
-                        }}
-                      />
-                      <button
-                        onClick={() => removeItem(i)}
-                        style={{
-                          position: "absolute",
-                          top: -6,
-                          right: -6,
-                          width: 20,
-                          height: 20,
-                          borderRadius: "50%",
-                          background: COLORS.text,
-                          color: "white",
-                          border: "none",
-                          fontSize: 11,
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          lineHeight: 1,
-                        }}
-                      >
-                        ×
-                      </button>
-                      <div
-                        style={{
-                          position: "absolute",
-                          bottom: 2,
-                          left: 2,
-                          background: "rgba(0,0,0,0.55)",
-                          color: "white",
-                          fontSize: 9,
-                          padding: "1px 4px",
-                          borderRadius: 3,
-                        }}
-                      >
-                        {i + 1}
-                      </div>
-                    </div>
-                  ))}
-                  {itemPreviews.length < 8 && (
-                    <div
-                      style={{
-                        width: 80,
-                        height: 80,
-                        borderRadius: 8,
-                        border: `1.5px dashed ${COLORS.border}`,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: COLORS.muted,
-                        fontSize: 22,
-                        cursor: "pointer",
-                      }}
-                    >
-                      +
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            <input
-              ref={itemsRef}
-              type="file"
-              accept="image/*"
-              multiple
-              style={{ display: "none" }}
-              onChange={(e) => handleItems(e.target.files)}
-            />
-          </div>
-        </div>
-
-        {/* Generate Button */}
-        <div style={{ marginTop: 28, display: "flex", justifyContent: "center" }}>
-          <button
-            onClick={generate}
-            disabled={!canGen}
-            style={{
-              background: canGen ? COLORS.accent : COLORS.border,
-              color: canGen ? "white" : COLORS.muted,
-              border: "none",
-              borderRadius: 10,
-              padding: "14px 44px",
-              fontSize: 15,
-              fontFamily: "'DM Sans', sans-serif",
-              fontWeight: 500,
-              cursor: canGen ? "pointer" : "default",
-              transition: "all 0.2s",
-              letterSpacing: "0.01em",
-            }}
-          >
-            {loading ? "Generating arrangements…" : "Generate Arrangements →"}
-          </button>
-        </div>
-
-        {/* Loading Dots */}
-        {loading && (
-          <div style={{ textAlign: "center", marginTop: 20, color: COLORS.muted, fontSize: 13 }}>
-            <span>Analysing your room and items</span>
-            <LoadingDots />
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div
-            style={{
-              marginTop: 20,
-              padding: "14px 20px",
-              background: "#FEF2F2",
-              border: "1px solid #FECACA",
-              borderRadius: 10,
-              fontSize: 14,
-              color: "#B91C1C",
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {/* Results */}
-        {arrangements && arrangements.length > 0 && (
-          <div style={{ marginTop: 40 }}>
-            <h2
-              style={{
-                fontFamily: "'Cormorant Garamond', serif",
-                fontSize: "1.6rem",
-                fontWeight: 400,
-                color: COLORS.text,
-                marginBottom: 20,
-              }}
-            >
-              Three Arrangements
-            </h2>
-
-            {/* Tab Pills */}
-            <div style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
-              {arrangements.map((arr, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActive(i)}
-                  style={{
-                    padding: "9px 22px",
-                    borderRadius: 100,
-                    border: `1.5px solid ${active === i ? COLORS.accent : COLORS.border}`,
-                    background: active === i ? COLORS.accent : COLORS.card,
-                    color: active === i ? "white" : COLORS.text,
-                    fontSize: 13,
-                    fontFamily: "'DM Sans', sans-serif",
-                    cursor: "pointer",
-                    transition: "all 0.18s",
-                    fontWeight: active === i ? 500 : 400,
-                  }}
-                >
-                  {i + 1}. {arr.name}
-                </button>
-              ))}
-            </div>
-
-            {/* Active Arrangement */}
-            {arrangements[active] && (
-              <ArrangementCard
-                arrangement={arrangements[active]}
-                roomSrc={roomPreview}
-                itemPreviews={itemPreviews}
-              />
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+      }
+      lastPos = {lat,lon};
+    },
+    function(err){ console.warn('GPS:',err.message); },
+    {enableHighAccuracy:true, maximumAge:1500, timeout:15000}
   );
 }
-
-function ArrangementCard({ arrangement, roomSrc, itemPreviews }) {
-  return (
-    <div
-      style={{
-        background: COLORS.card,
-        border: `1px solid ${COLORS.border}`,
-        borderRadius: 16,
-        overflow: "hidden",
-      }}
-    >
-      {/* Room with Overlays */}
-      <div style={{ position: "relative", width: "100%" }}>
-        <img
-          src={roomSrc}
-          alt="Room"
-          style={{ width: "100%", display: "block", maxHeight: 500, objectFit: "contain", background: "#1a1210" }}
-        />
-        {arrangement.placements.map((p, i) => {
-          const src = itemPreviews[p.itemIndex];
-          if (!src) return null;
-          return (
-            <div
-              key={i}
-              title={p.note || ""}
-              style={{
-                position: "absolute",
-                left: `${p.xPercent}%`,
-                top: `${p.yPercent}%`,
-                width: `${p.widthPercent}%`,
-                zIndex: 10,
-              }}
-            >
-              <img
-                src={src}
-                style={{
-                  width: "100%",
-                  display: "block",
-                  boxShadow: "0 6px 24px rgba(0,0,0,0.5), 0 0 0 3px rgba(255,255,255,0.9)",
-                  borderRadius: 2,
-                  opacity: 0.88,
-                }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  top: -9,
-                  left: -9,
-                  width: 20,
-                  height: 20,
-                  borderRadius: "50%",
-                  background: COLORS.accent,
-                  color: "white",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                }}
-              >
-                {p.itemIndex + 1}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Info Panel */}
-      <div style={{ padding: "24px 28px" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 10 }}>
-          <h3
-            style={{
-              fontFamily: "'Cormorant Garamond', serif",
-              fontSize: "1.4rem",
-              fontWeight: 600,
-              color: COLORS.text,
-            }}
-          >
-            {arrangement.name}
-          </h3>
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 500,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: COLORS.accent,
-              background: COLORS.accentLight,
-              padding: "3px 10px",
-              borderRadius: 100,
-            }}
-          >
-            {arrangement.style}
-          </span>
-        </div>
-        <p style={{ fontSize: 14, color: COLORS.muted, lineHeight: 1.7, marginBottom: 18 }}>
-          {arrangement.description}
-        </p>
-
-        {/* Placement Notes */}
-        <div
-          style={{
-            borderTop: `1px solid ${COLORS.border}`,
-            paddingTop: 16,
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 500,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: COLORS.muted,
-              marginBottom: 4,
-            }}
-          >
-            Placement Notes
-          </div>
-          {arrangement.placements.map((p, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-              <span
-                style={{
-                  width: 20,
-                  height: 20,
-                  minWidth: 20,
-                  borderRadius: "50%",
-                  background: COLORS.accent,
-                  color: "white",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginTop: 1,
-                }}
-              >
-                {p.itemIndex + 1}
-              </span>
-              <span style={{ fontSize: 13, color: COLORS.muted, lineHeight: 1.5 }}>
-                <strong style={{ color: COLORS.text, fontWeight: 500 }}>Item {p.itemIndex + 1}:</strong>{" "}
-                {p.note || "Position as shown"}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+function stopGPS() {
+  if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId=null; }
 }
 
-function LoadingDots() {
-  const [dots, setDots] = useState(".");
-  useEffect(() => {
-    const t = setInterval(() => setDots((d) => (d.length >= 3 ? "." : d + ".")), 500);
-    return () => clearInterval(t);
-  }, []);
-  return <span style={{ display: "inline-block", width: 20 }}>{dots}</span>;
+// ═══ VOICE ═══
+function toggleVoice() {
+  voiceOn = !voiceOn;
+  if (voiceOn) say('Voice directions on.');
+  document.getElementById('voiceToggleBtn').textContent = voiceOn?'🔊':'🔇';
+  document.getElementById('voiceToggleBtn').style.background = voiceOn?'#0f4f2e':'#1e3a5f';
+  document.getElementById('voiceToggleBtn').style.borderColor = voiceOn?'#15803d':'#2d4a6b';
+  document.getElementById('voiceToggleBtn').style.color = voiceOn?'#4ade80':'#64748b';
+  updateStatsVoice();
 }
+function testVoice() { say('Voice directions are working.'); }
+function updateStatsVoice() {
+  document.getElementById('statsVoiceIcon').textContent = voiceOn?'🔊':'🔇';
+  document.getElementById('statsVoiceIcon').style.background = voiceOn?'#0f4f2e':'#0a1e3d';
+  document.getElementById('statsVoiceIcon').style.borderColor = voiceOn?'#15803d':'#1e3a5f';
+  document.getElementById('statsVoiceLabel').textContent = voiceOn?'Voice On':'Voice Off';
+  document.getElementById('statsVoiceSub').textContent = voiceOn?'Turn-by-turn announcements active':'Tap to enable spoken directions';
+  document.getElementById('statsVoiceToggle').textContent = voiceOn?'Turn Off':'Turn On';
+  document.getElementById('statsVoiceToggle').style.background = voiceOn?'#7f1d1d':'#1d4ed8';
+  document.getElementById('statsVoiceTest').style.display = voiceOn?'block':'none';
+}
+
+// ═══ MILES ═══
+function addMile(a) {
+  miles = parseFloat((miles+a).toFixed(1));
+  document.getElementById('dashOdo').textContent = miles.toFixed(1);
+  document.getElementById('statsOdo').textContent = miles.toFixed(1);
+  updateDashGas();
+  updateStatsGas();
+}
+function resetMiles() {
+  miles = 0;
+  document.getElementById('dashOdo').textContent = '0.0';
+  document.getElementById('statsOdo').textContent = '0.0';
+  updateDashGas();
+  updateStatsGas();
+}
+function holdStart(a) { addMile(a); holdTimer = setInterval(function(){ addMile(a); }, 130); }
+function holdEnd() { clearInterval(holdTimer); }
+
+// ═══ GAS ═══
+function getGasNums() {
+  const mpg = parseFloat(document.getElementById('mpgInput').value)||0;
+  const ppg = parseFloat(document.getElementById('ppgInput').value)||0;
+  const dollars = parseFloat(document.getElementById('dollarsInput').value)||0;
+  const gallons = (ppg>0&&dollars>0) ? dollars/ppg : 0;
+  const range = (mpg>0&&gallons>0) ? gallons*mpg : 0;
+  const miLeft = Math.max(0, range-miles);
+  const pct = range>0 ? miLeft/range : 0;
+  return {mpg,ppg,dollars,gallons,range,miLeft,pct};
+}
+function makeGasSegs(pct, containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML='';
+  const n=12, filled=Math.round(pct*n);
+  let col='#34d399';
+  if(pct<=0.25)col='#f87171';
+  else if(pct<=0.5)col='#fbbf24';
+  for(let i=0;i<n;i++){
+    const d=document.createElement('div');
+    d.className='gasbar-seg';
+    if(i<filled)d.style.background=col;
+    el.appendChild(d);
+  }
+}
+function updateGasBar() {
+  const g = getGasNums();
+  const bar = document.getElementById('gasBarHome');
+  if (g.gallons>0) {
+    bar.style.display='block';
+    makeGasSegs(1,'gasSegsHome');
+    document.getElementById('gasPctHome').textContent='100%';
+    document.getElementById('gasGalHome').textContent=g.gallons.toFixed(2)+' gal';
+    document.getElementById('gasRangeHome').textContent=g.range>0?'~'+g.range.toFixed(0)+' mi range':'Enter MPG for range';
+  } else { bar.style.display='none'; }
+}
+function updateDashGas() {
+  const g = getGasNums();
+  const el = document.getElementById('dashGasContent');
+  if (g.range>0) {
+    const costLeft = g.mpg>0&&g.ppg>0 ? '$'+(g.miLeft/g.mpg*g.ppg).toFixed(2) : '—';
+    el.innerHTML = '<div class="gasbar" style="margin-bottom:10px"><span style="font-size:16px">⛽</span><div class="gasbar-segs" id="dashGasSegs"></div><span style="font-size:12px;color:#64748b;min-width:36px;text-align:right">'+Math.round(g.pct*100)+'%</span></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:10px">'+
+      '<div style="text-align:center"><div style="color:#1e3a5f;font-size:8px;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Miles Left</div><div style="color:#e2e8f0;font-size:20px;font-weight:700">'+g.miLeft.toFixed(0)+'</div></div>'+
+      '<div style="text-align:center"><div style="color:#1e3a5f;font-size:8px;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Gallons</div><div style="color:#94a3b8;font-size:20px;font-weight:700">'+g.gallons.toFixed(2)+'</div></div>'+
+      '<div style="text-align:center"><div style="color:#1e3a5f;font-size:8px;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Cost Left</div><div style="color:#34d399;font-size:20px;font-weight:700">'+costLeft+'</div></div>'+
+      '</div>';
+    makeGasSegs(g.pct,'dashGasSegs');
+  } else {
+    el.innerHTML='<div style="color:#334155;font-size:12px;text-align:center;padding:12px 0">Set up fuel on home screen</div>';
+  }
+}
+function updateStatsGas() { updateDashGas(); }
+
+// ═══ GAS MODAL ═══
+function openGasModal() {
+  const g = getGasNums();
+  document.getElementById('modalGallons').textContent = 'Gallons on hand: '+g.gallons.toFixed(3);
+  document.getElementById('modalMpg').value='';
+  document.getElementById('modalPpg').value='';
+  document.getElementById('modalPreview').style.display='none';
+  document.getElementById('gasModal').classList.add('open');
+  document.getElementById('modalMpg').oninput = updateModalPreview;
+  document.getElementById('modalPpg').oninput = updateModalPreview;
+}
+function updateModalPreview() {
+  const g = getGasNums();
+  const nm=parseFloat(document.getElementById('modalMpg').value)||0;
+  const np=parseFloat(document.getElementById('modalPpg').value)||0;
+  const prev = document.getElementById('modalPreview');
+  if (nm>0&&np>0&&g.gallons>0) {
+    prev.style.display='block';
+    prev.textContent='New cost: $'+(g.gallons*np).toFixed(2)+' · Range: '+(g.gallons*nm).toFixed(0)+' mi';
+  } else { prev.style.display='none'; }
+}
+function applyGasModal() {
+  const nm=document.getElementById('modalMpg').value;
+  const np=document.getElementById('modalPpg').value;
+  const g = getGasNums();
+  if (nm) document.getElementById('mpgInput').value=nm;
+  if (np) {
+    document.getElementById('ppgInput').value=np;
+    if (g.gallons>0) document.getElementById('dollarsInput').value=(g.gallons*parseFloat(np)).toFixed(2);
+  }
+  closeGasModal();
+  updateGasBar();
+  updateDashGas();
+}
+function closeGasModal() { document.getElementById('gasModal').classList.remove('open'); }
+
+// ═══ STATS REFRESH ═══
+function refreshStats() {
+  document.getElementById('statsOdo').textContent = miles.toFixed(1);
+  const steps = route?route.steps:[];
+  const cur = steps[stepIndex]||{};
+  const nxt = steps[stepIndex+1]||null;
+  const maxSpeed = document.getElementById('speedInput').value||'45';
+  document.getElementById('statsSpeedNum').textContent = cur.speedLimit||maxSpeed;
+  document.getElementById('statsSpeedNote').textContent = cur.speedLimit?('Current road: '+(cur.road||'—')):'No active route — showing your max';
+  const nc = document.getElementById('statsNavContent');
+  if (cur.instruction) {
+    let html='<div style="background:#1a3a6e;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:10px">'+
+      '<div style="font-size:36px;line-height:1;flex-shrink:0">'+(ICONS[cur.dir]||'↑')+'</div>'+
+      '<div><div style="color:#93c5fd;font-size:9px;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Now</div>'+
+      '<div style="color:white;font-size:15px;font-weight:700;line-height:1.3">'+cur.instruction+'</div>'+
+      '<div style="color:rgba(255,255,255,0.35);font-size:11px;margin-top:4px">'+fmtDist(distToTurn)+' · '+cur.road+'</div></div></div>';
+    if (nxt) {
+      html+='<div style="background:#0a1628;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:14px;border:1px solid #1e293b">'+
+        '<div style="font-size:28px;line-height:1;flex-shrink:0;opacity:0.6">'+(ICONS[nxt.dir]||'↑')+'</div>'+
+        '<div><div style="color:#334155;font-size:9px;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Then</div>'+
+        '<div style="color:#94a3b8;font-size:14px;line-height:1.3">'+nxt.instruction+'</div>'+
+        '<div style="color:#334155;font-size:11px;margin-top:3px">'+nxt.distance+' · '+nxt.road+'</div></div></div>';
+    }
+    nc.innerHTML = html;
+  } else {
+    nc.innerHTML='<div style="color:#334155;font-size:13px;text-align:center;padding:20px 0;border:1px dashed #1e293b;border-radius:10px">No active route — start navigation from Home</div>';
+  }
+  updateStatsVoice();
+  updateStatsGas();
+}
+
+// ═══ INPUT LISTENERS ═══
+document.getElementById('mpgInput').addEventListener('input', updateGasBar);
+document.getElementById('ppgInput').addEventListener('input', updateGasBar);
+document.getElementById('dollarsInput').addEventListener('input', updateGasBar);
+</script>
+</body>
+</html>
